@@ -32,7 +32,6 @@ namespace fastdds {
 
 #define SERVER_DEFAULT_GUID "01.0f.00.44.41.54.95.42.52.4f.4b.45.52"
 #define SERVER_DEFAULT_GUID_ID_INDEX 2
-#define DEFAULT_DOMAIN 11
 
 inline eprosima::fastrtps::rtps::GuidPrefix_t guid_server(
         uint8_t id)
@@ -42,14 +41,6 @@ inline eprosima::fastrtps::rtps::GuidPrefix_t guid_server(
     guid.value[SERVER_DEFAULT_GUID_ID_INDEX] = static_cast<unsigned char>(id);
     return guid;
 }
-
-std::vector<std::pair<std::string, uint16_t>> split_locator(std::string addresses, std::string value_delimiter=",", std::string address_delimiter=";");
-
-std::vector<std::tuple<std::string, uint16_t, uint16_t>> split_ds_locator(std::string addresses, std::string value_delimiter=",", std::string address_delimiter=";");
-
-std::string print_locator(std::string addresses, std::string value_delimiter=",", std::string address_delimiter=";");
-
-std::string print_ds_locator(std::string addresses, std::string value_delimiter=",", std::string address_delimiter=";");
 
 } //  namespace fastdds
 } //  namespace sh
