@@ -208,6 +208,7 @@ protected:
 
     //! Get Databroker DomainParticipantQos with TCP enable in WAN
     //! It uses \c get_participant_qos to reuse std participant tags
+    //! tags: server_id, listening_addresses, connection_addresses
     eprosima::fastdds::dds::DomainParticipantQos get_databroker_qos(
             const YAML::Node& config);
 

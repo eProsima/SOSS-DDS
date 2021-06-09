@@ -99,13 +99,13 @@ void Participant::build_participant(
     ::fastdds::dds::DomainParticipantQos participant_qos;
 
     // Depending the SH type, use participant std qos or databroker qos
-    if (config["participant"])
+    if (config["type"] && config["type"].as<std::string>() == "databroker")
+    {
+        participant_qos = get_databroker_qos(config["participant"]);
+    }
+    else
     {
         participant_qos = get_participant_qos(config["participant"]);
-    }
-    else if (config["databroker"])
-    {
-        participant_qos = get_databroker_qos(config["databroker"]);
     }
 
     dds_participant_ = ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
@@ -377,14 +377,15 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
     // Call first std participant qos to reuse std flags for fastdds SH
     eprosima::fastdds::dds::DomainParticipantQos pqos = get_participant_qos(config);
 
+    //////
+    // Server id
     uint32_t server_id = 0;
-    std::string listening_addresses = "";
-    std::string connection_addresses = "";
-
     if (config["server_id"])
     {
         // Conversion to int is needed so it is not treated as a char
         server_id = config["server_id"].as<uint32_t>() % std::numeric_limits<uint8_t>::max();
+        logger_ << utils::Logger::Level::DEBUG
+                << "Server id set by configuration to " << server_id << std::endl;
     }
     else
     {
@@ -392,9 +393,77 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
                 << "Not Server ID set in configuration, use 0 as default" << std::endl;
     }
 
+    // Set guid manually depending on the id
+    pqos.wire_protocol().prefix = guid_server(server_id);
+    pqos.name("DataBroker_IS-FastDDS-SH_participant_" + std::to_string(server_id));
+
+    //////
+    // Listening addresses
     if (config["listening_addresses"])
     {
-        listening_addresses = config["listening_addresses"].as<std::string>();
+        YAML::Node listening_addresses = config["listening_addresses"];
+
+        // Configure listening address
+        for (auto address : listening_addresses)
+        {
+            std::string ip;
+            uint16_t port;
+
+            // Get address values. If not present, send error
+            if (address["ip"])
+            {
+                ip = address["ip"].as<std::string>();
+            }
+            else
+            {
+                std::ostringstream err;
+                err << "Address in <listening_addresses> must contain a field <ip> ";
+
+                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
+
+                continue;
+            }
+
+            if (address["port"])
+            {
+                port = address["port"].as<std::uint16_t>();
+            }
+            else
+            {
+                std::ostringstream err;
+                err << "Address in <listening_addresses> must contain a field <port> ";
+
+                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
+
+                continue;
+            }
+
+            // Create TCPv4 transport
+            std::shared_ptr<eprosima::fastdds::rtps::TCPv4TransportDescriptor> descriptor =
+                std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
+
+            descriptor->add_listener_port(port);
+            descriptor->set_WAN_address(ip);
+
+            descriptor->sendBufferSize = 0;
+            descriptor->receiveBufferSize = 0;
+
+            pqos.transport().user_transports.push_back(descriptor);
+
+            // Create Locator
+            eprosima::fastrtps::rtps::Locator_t tcp_locator;
+            tcp_locator.kind = LOCATOR_KIND_TCPv4;
+
+            eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, ip);
+            eprosima::fastrtps::rtps::IPLocator::setWan(tcp_locator, ip);
+            eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, port);
+            eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, port);
+
+            pqos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(tcp_locator);
+
+            logger_ << utils::Logger::Level::DEBUG
+                    << "Server listening in: " << ip << ":" << port << std::endl;
+        }
     }
     else
     {
@@ -404,9 +473,80 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
                 << std::endl;
     }
 
+    //////
+    // Connection addresses
     if (config["connection_addresses"])
     {
-        connection_addresses = config["connection_addresses"].as<std::string>();
+        YAML::Node connection_addresses = config["connection_addresses"];
+
+        // Configure listening address
+        for (auto address : connection_addresses)
+        {
+            std::string ip;
+            uint16_t port;
+            uint16_t server_id;
+
+            // Get address values. If not present, send error
+            if (address["ip"])
+            {
+                ip = address["ip"].as<std::string>();
+            }
+            else
+            {
+                std::ostringstream err;
+                err << "Address in <connection_addresses> must contain a field <ip> ";
+
+                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
+
+                continue;
+            }
+
+            if (address["port"])
+            {
+                port = address["port"].as<std::uint16_t>();
+            }
+            else
+            {
+                std::ostringstream err;
+                err << "Address in <connection_addresses> must contain a field <port> ";
+
+                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
+
+                continue;
+            }
+
+            if (address["server_id"])
+            {
+                server_id = address["server_id"].as<std::uint16_t>();
+            }
+            else
+            {
+                std::ostringstream err;
+                err << "Address in <connection_addresses> must contain a field <server_id> ";
+
+                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
+
+                continue;
+            }
+
+            // Set Server guid manually
+            eprosima::fastrtps::rtps::RemoteServerAttributes server_attr;
+            server_attr.guidPrefix = guid_server(server_id);
+
+            // Discovery server locator configuration TCP
+            eprosima::fastrtps::rtps::Locator_t tcp_locator;
+            tcp_locator.kind = LOCATOR_KIND_TCPv4;
+            eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, ip);
+            eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, port);
+            eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, port);
+            server_attr.metatrafficUnicastLocatorList.push_back(tcp_locator);
+
+            pqos.wire_protocol().builtin.discovery_config.m_DiscoveryServers.push_back(server_attr);
+
+            logger_ << utils::Logger::Level::DEBUG
+                    << "Connecting to remote server with guid: " << server_attr.guidPrefix
+                    << " in: " << ip << ":" << port << std::endl;
+        }
     }
     else
     {
@@ -415,69 +555,14 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
                 << std::endl;
     }
 
-    logger_ << utils::Logger::Level::DEBUG
-            << "Server id set by configuration to " << server_id << std::endl;
-    logger_ << utils::Logger::Level::DEBUG
-            << "Listening addresses set by configuration to " << listening_addresses << std::endl;
-    logger_ << utils::Logger::Level::DEBUG
-            << "Connection addresses set by configuration to " << connection_addresses << std::endl;
-
-    pqos.name("DataBroker_IS-FastDDS-SH_participant");
-
+    // TODO decide the discovery server configuration
     pqos.wire_protocol().builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
     pqos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod =
             fastrtps::Duration_t(2, 0);
 
+    // Set this participant as a SERVER
     pqos.wire_protocol().builtin.discovery_config.discoveryProtocol =
         fastrtps::rtps::DiscoveryProtocol::SERVER;
-
-    // Set guid manually depending on the id
-    pqos.wire_protocol().prefix = guid_server(server_id);
-
-    // Listening configuration
-    for (auto address : split_locator(listening_addresses))
-    {
-        // Create TCPv4 transport
-        std::shared_ptr<eprosima::fastdds::rtps::TCPv4TransportDescriptor> descriptor =
-            std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
-
-        descriptor->add_listener_port(std::get<1>(address));
-        descriptor->set_WAN_address(std::get<0>(address));
-
-        descriptor->sendBufferSize = 0;
-        descriptor->receiveBufferSize = 0;
-
-        pqos.transport().user_transports.push_back(descriptor);
-
-        // Create Locator
-        eprosima::fastrtps::rtps::Locator_t tcp_locator;
-        tcp_locator.kind = LOCATOR_KIND_TCPv4;
-
-        eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, std::get<0>(address));
-        eprosima::fastrtps::rtps::IPLocator::setWan(tcp_locator, std::get<0>(address));
-        eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, std::get<1>(address));
-        eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, std::get<1>(address));
-
-        pqos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(tcp_locator);
-    }
-
-    // Add every connection address as server
-    for (auto address : split_ds_locator(connection_addresses))
-    {
-        // Set Server guid manually
-        eprosima::fastrtps::rtps::RemoteServerAttributes server_attr;
-        server_attr.guidPrefix = guid_server(std::get<2>(address));
-
-        // Discovery server locator configuration TCP
-        eprosima::fastrtps::rtps::Locator_t tcp_locator;
-        tcp_locator.kind = LOCATOR_KIND_TCPv4;
-        eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, std::get<0>(address));
-        eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, std::get<1>(address));
-        eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, std::get<1>(address));
-        server_attr.metatrafficUnicastLocatorList.push_back(tcp_locator);
-
-        pqos.wire_protocol().builtin.discovery_config.m_DiscoveryServers.push_back(server_attr);
-    }
 
     logger_ << utils::Logger::Level::DEBUG
             << "Databroker initialized with GUID " << pqos.wire_protocol().prefix << std::endl;
