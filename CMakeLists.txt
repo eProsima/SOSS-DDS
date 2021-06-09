@@ -72,6 +72,7 @@ if(BUILD_LIBRARY)
             src/Server.cpp
             src/Participant.cpp
             src/SystemHandle.cpp
+            src/utils.cpp
     )
 endif()
 

@@ -18,7 +18,9 @@
 #include "Participant.hpp"
 #include "DDSMiddlewareException.hpp"
 #include "Conversion.hpp"
+#include "utils.hpp"
 
+#include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
 #include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
 
 #include <fastrtps/types/DynamicDataFactory.h>
@@ -43,54 +45,7 @@ Participant::Participant(
     : dds_participant_(nullptr)
     , logger_("is::sh::FastDDS::Participant")
 {
-    using fastrtps::xmlparser::XMLP_ret;
-    using fastrtps::xmlparser::XMLProfileManager;
-
-    if (!config.IsMap() || !config["file_path"] || !config["profile_name"])
-    {
-        if (config["domain_id"])
-        {
-            const ::fastdds::dds::DomainId_t domain_id = config["domain_id"].as<uint32_t>();
-            build_participant(domain_id);
-        }
-        else
-        {
-            std::ostringstream err;
-            err << "The node 'participant' in the YAML configuration of the 'fastdds' system "
-                << "must be a map containing two keys: 'file_path' and 'profile_name'";
-
-            throw DDSMiddlewareException(logger_, err.str());
-        }
-
-    }
-    else
-    {
-        const std::string file_path = config["file_path"].as<std::string>();
-        if (XMLP_ret::XML_OK != XMLProfileManager::loadXMLFile(file_path))
-        {
-            throw DDSMiddlewareException(
-                      logger_, "Loading provided XML file in 'file_path' field was not successful");
-        }
-
-        const std::string profile_name = config["profile_name"].as<std::string>();
-
-        dds_participant_ = this->create_participant_with_profile(profile_name);
-
-        if (dds_participant_)
-        {
-            logger_ << utils::Logger::Level::INFO
-                    << "Created Fast DDS participant '" << dds_participant_->get_qos().name()
-                    << "' from profile configuration '" << profile_name << "'" << std::endl;
-        }
-        else
-        {
-            std::ostringstream err;
-            err << "Fast DDS participant '" << dds_participant_->get_qos().name()
-                << "' from profile configuration '" << profile_name << "' creation failed";
-
-            throw DDSMiddlewareException(logger_, err.str());
-        }
-    }
+    build_participant(config);
 }
 
 Participant::~Participant()
@@ -108,33 +63,66 @@ Participant::~Participant()
     }
 }
 
-void Participant::build_participant(
-        const ::fastdds::dds::DomainId_t& domain_id)
+void Participant::build_participant()
 {
-    ::fastdds::dds::DomainParticipantQos participant_qos = ::fastdds::dds::PARTICIPANT_QOS_DEFAULT;
-    participant_qos.name("default_IS-FastDDS-SH_participant");
+    // Call build participant with empty configuration
+    build_participant(YAML::Node());
+}
 
-    // By default use UDPv4 due to communication failures between dockers sharing the network with the host
-    // When it is solved in Fast-DDS delete the following lines and use the default builtin transport.
-    participant_qos.transport().use_builtin_transports = false;
-    auto udp_transport = std::make_shared<::fastdds::rtps::UDPv4TransportDescriptor>();
-    participant_qos.transport().user_transports.push_back(udp_transport);
+void Participant::build_participant(
+        const YAML::Node& config)
+{
+    logger_ << utils::Logger::Level::DEBUG << "Creating new fastdds Participant" << std::endl;
+
+    // Check if domain_id exists in config
+    eprosima::fastdds::dds::DomainId_t domain_id(0);
+
+    // Check if domain_id tag is under other tag
+    if (config["domain_id"])
+    {
+        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from plain config" << std::endl;
+        domain_id = config["domain_id"].as<uint32_t>();
+    }
+    else if (config["participant"] && config["participant"]["domain_id"])
+    {
+        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from participant" << std::endl;
+        domain_id = config["participant"]["domain_id"].as<uint32_t>();
+    }
+    else if (config["databroker"] && config["databroker"]["domain_id"])
+    {
+        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from databroker" << std::endl;
+        domain_id = config["databroker"]["domain_id"].as<uint32_t>();
+    }
+
+    logger_ << utils::Logger::Level::DEBUG << "Creating Participant QoS" << std::endl;
+
+    ::fastdds::dds::DomainParticipantQos participant_qos;
+
+    // Depending the SH type, use participant std qos or databroker qos
+    if (config["participant"])
+    {
+        participant_qos = get_participant_qos(config["participant"]);
+    }
+    else if (config["databroker"])
+    {
+        participant_qos = get_databroker_qos(config["databroker"]);
+    }
 
     dds_participant_ = ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
-        domain_id, participant_qos);
+        domain_id,
+        participant_qos);
 
     if (dds_participant_)
     {
         logger_ << utils::Logger::Level::INFO
                 << "Created Fast DDS participant '" << participant_qos.name()
-                << "' with default QoS attributes and Domain ID: "
-                << domain_id << std::endl;
+                << "' with Domain ID: " << domain_id << std::endl;
     }
     else
     {
         std::ostringstream err;
         err << "Error while creating Fast DDS participant '" << participant_qos.name()
-            << "' with default QoS attributes and Domain ID: " << domain_id;
+            << "' with Domain ID: " << domain_id;
 
         throw DDSMiddlewareException(logger_, err.str());
     }
@@ -322,62 +310,179 @@ bool Participant::dissociate_topic_from_dds_entity(
     }
 }
 
-static void set_qos_from_attributes(
-        ::fastdds::dds::DomainParticipantQos& qos,
-        const eprosima::fastrtps::rtps::RTPSParticipantAttributes& attr)
+eprosima::fastdds::dds::DomainParticipantQos Participant::get_default_participant_qos()
 {
-    qos.user_data().setValue(attr.userData);
-    qos.allocation() = attr.allocation;
-    qos.properties() = attr.properties;
-    qos.wire_protocol().prefix = attr.prefix;
-    qos.wire_protocol().participant_id = attr.participantID;
-    qos.wire_protocol().builtin = attr.builtin;
-    qos.wire_protocol().port = attr.port;
-    qos.wire_protocol().throughput_controller = attr.throughputController;
-    qos.wire_protocol().default_unicast_locator_list = attr.defaultUnicastLocatorList;
-    qos.wire_protocol().default_multicast_locator_list = attr.defaultMulticastLocatorList;
+    logger_ << utils::Logger::Level::DEBUG << "#! get_default_participant_qos" << std::endl;
 
-    if (attr.useBuiltinTransports)
-    {
-        // By default use UDPv4 due to communication failures between dockers sharing the network with the host
-        // When it is solved in Fast-DDS delete the following lines and use the default builtin transport.
-        qos.transport().use_builtin_transports = false;
-        auto udp_transport = std::make_shared<::fastdds::rtps::UDPv4TransportDescriptor>();
-        qos.transport().user_transports.push_back(udp_transport);
-    }
-    else
-    {
-        qos.transport().user_transports = attr.userTransports;
-        qos.transport().use_builtin_transports = attr.useBuiltinTransports;
-    }
-    
-    qos.transport().send_socket_buffer_size = attr.sendSocketBufferSize;
-    qos.transport().listen_socket_buffer_size = attr.listenSocketBufferSize;
-    qos.name() = attr.getName();
+    eprosima::fastdds::dds::DomainParticipantQos df_pqos;
+    df_pqos.name("default_IS-FastDDS-SH_participant");
+
+    // By default use UDPv4 due to communication failures between dockers sharing the network with the host
+    // When it is solved in Fast-DDS delete the following lines and use the default builtin transport.
+    df_pqos.transport().use_builtin_transports = false;
+    auto udp_transport = std::make_shared<::fastdds::rtps::UDPv4TransportDescriptor>();
+    df_pqos.transport().user_transports.push_back(udp_transport);
+
+    return df_pqos;
 }
 
-::fastdds::dds::DomainParticipant* Participant::create_participant_with_profile(
-    const std::string& profile_name)
+eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
+        const YAML::Node& config)
 {
-    using namespace fastrtps::xmlparser;
+    logger_ << utils::Logger::Level::DEBUG << "#! get_participant_qos" << std::endl;
 
-    fastrtps::ParticipantAttributes attr;
-    if (XMLP_ret::XML_OK == XMLProfileManager::fillParticipantAttributes(profile_name, attr))
+    // Load XML if set in config yaml
+    if (config["file_path"])
     {
-        ::fastdds::dds::DomainParticipantQos qos = ::fastdds::dds::PARTICIPANT_QOS_DEFAULT;
-        set_qos_from_attributes(qos, attr.rtps);
+        const std::string file_path = config["file_path"].as<std::string>();
+        if (fastrtps::xmlparser::XMLP_ret::XML_OK !=
+            fastrtps::xmlparser::XMLProfileManager::loadXMLFile(file_path))
+        {
+            std::ostringstream err;
+            err << "Loading provided XML file in 'file_path': " << file_path << " incorrect or unexisted file";
+            throw DDSMiddlewareException(
+                logger_, err.str());
+        }
+    }
 
-        return ::fastdds::dds::DomainParticipantFactory::get_instance()->
-               create_participant(attr.domainId, qos);
+    // Variable to return
+    eprosima::fastdds::dds::DomainParticipantQos pqos = get_default_participant_qos();
+
+    // Load XML if set in config yaml
+    if (config["profile_name"])
+    {
+
+        const std::string profile_name = config["profile_name"].as<std::string>();
+        if (eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK !=
+                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->get_participant_qos_from_profile(
+                    profile_name,
+                    pqos))
+        {
+            std::ostringstream err;
+            err << "Failed to fetch Fast DDS participant qos from XML "
+                << "for profile named '" << profile_name << "'";
+
+            throw DDSMiddlewareException(logger_, err.str());
+        }
+    }
+
+    return pqos;
+}
+
+eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
+        const YAML::Node& config)
+{
+    logger_ << utils::Logger::Level::DEBUG << "#! get_databroker_qos" << std::endl;
+
+    // Call first std participant qos to reuse std flags for fastdds SH
+    eprosima::fastdds::dds::DomainParticipantQos pqos = get_participant_qos(config);
+
+    uint32_t server_id = 0;
+    std::string listening_addresses = "";
+    std::string connection_addresses = "";
+
+    if (config["server_id"])
+    {
+        // Conversion to int is needed so it is not treated as a char
+        server_id = config["server_id"].as<uint32_t>() % std::numeric_limits<uint8_t>::max();
     }
     else
     {
-        std::ostringstream err;
-        err << "Failed to fetch Fast DDS participant attributes from XML "
-            << "for profile named '" << profile_name << "'";
-
-        throw DDSMiddlewareException(logger_, err.str());
+        logger_ << utils::Logger::Level::INFO
+                << "Not Server ID set in configuration, use 0 as default" << std::endl;
     }
+
+    if (config["listening_addresses"])
+    {
+        listening_addresses = config["listening_addresses"].as<std::string>();
+    }
+    else
+    {
+        logger_ << utils::Logger::Level::WARN
+                << "Server has no listening address."
+                << "It will not discover or connect to other servers."
+                << std::endl;
+    }
+
+    if (config["connection_addresses"])
+    {
+        connection_addresses = config["connection_addresses"].as<std::string>();
+    }
+    else
+    {
+        logger_ << utils::Logger::Level::INFO
+                << "Server has no connection addresses, it will not try to connect to remote servers"
+                << std::endl;
+    }
+
+    logger_ << utils::Logger::Level::DEBUG
+            << "Server id set by configuration to " << server_id << std::endl;
+    logger_ << utils::Logger::Level::DEBUG
+            << "Listening addresses set by configuration to " << listening_addresses << std::endl;
+    logger_ << utils::Logger::Level::DEBUG
+            << "Connection addresses set by configuration to " << connection_addresses << std::endl;
+
+    pqos.name("DataBroker_IS-FastDDS-SH_participant");
+
+    pqos.wire_protocol().builtin.discovery_config.leaseDuration = fastrtps::c_TimeInfinite;
+    pqos.wire_protocol().builtin.discovery_config.leaseDuration_announcementperiod =
+            fastrtps::Duration_t(2, 0);
+
+    pqos.wire_protocol().builtin.discovery_config.discoveryProtocol =
+        fastrtps::rtps::DiscoveryProtocol::SERVER;
+
+    // Set guid manually depending on the id
+    pqos.wire_protocol().prefix = guid_server(server_id);
+
+    // Listening configuration
+    for (auto address : split_locator(listening_addresses))
+    {
+        // Create TCPv4 transport
+        std::shared_ptr<eprosima::fastdds::rtps::TCPv4TransportDescriptor> descriptor =
+            std::make_shared<eprosima::fastdds::rtps::TCPv4TransportDescriptor>();
+
+        descriptor->add_listener_port(std::get<1>(address));
+        descriptor->set_WAN_address(std::get<0>(address));
+
+        descriptor->sendBufferSize = 0;
+        descriptor->receiveBufferSize = 0;
+
+        pqos.transport().user_transports.push_back(descriptor);
+
+        // Create Locator
+        eprosima::fastrtps::rtps::Locator_t tcp_locator;
+        tcp_locator.kind = LOCATOR_KIND_TCPv4;
+
+        eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, std::get<0>(address));
+        eprosima::fastrtps::rtps::IPLocator::setWan(tcp_locator, std::get<0>(address));
+        eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, std::get<1>(address));
+        eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, std::get<1>(address));
+
+        pqos.wire_protocol().builtin.metatrafficUnicastLocatorList.push_back(tcp_locator);
+    }
+
+    // Add every connection address as server
+    for (auto address : split_ds_locator(connection_addresses))
+    {
+        // Set Server guid manually
+        eprosima::fastrtps::rtps::RemoteServerAttributes server_attr;
+        server_attr.guidPrefix = guid_server(std::get<2>(address));
+
+        // Discovery server locator configuration TCP
+        eprosima::fastrtps::rtps::Locator_t tcp_locator;
+        tcp_locator.kind = LOCATOR_KIND_TCPv4;
+        eprosima::fastrtps::rtps::IPLocator::setIPv4(tcp_locator, std::get<0>(address));
+        eprosima::fastrtps::rtps::IPLocator::setLogicalPort(tcp_locator, std::get<1>(address));
+        eprosima::fastrtps::rtps::IPLocator::setPhysicalPort(tcp_locator, std::get<1>(address));
+        server_attr.metatrafficUnicastLocatorList.push_back(tcp_locator);
+
+        pqos.wire_protocol().builtin.discovery_config.m_DiscoveryServers.push_back(server_attr);
+    }
+
+    logger_ << utils::Logger::Level::DEBUG
+            << "Databroker initialized with GUID " << pqos.wire_protocol().prefix << std::endl;
+
+    return pqos;
 }
 
 } //  namespace fastdds

@@ -69,22 +69,12 @@ public:
          */
         try
         {
-            if (configuration["participant"])
-            {
-                participant_ = std::make_unique<Participant>(configuration["participant"]);
-            }
-            else
-            {
-                logger_ << utils::Logger::Level::WARN
-                        << "Participant not provided in configuration file. "
-                        << "A participant using the default transport locators "
-                        << "and Domain ID 0 will be created." << std::endl;
-
-                participant_ = std::make_unique<Participant>();
-            }
+            // TODO Add a warning that was here in Participant build_participant creation
+            participant_ = std::make_unique<Participant>(configuration);
         }
         catch (DDSMiddlewareException& e)
         {
+            logger_ << utils::Logger::Level::ERROR << "Error parsing configuration" << std::endl;
             e.from_logger << utils::Logger::Level::ERROR << e.what() << std::endl;
             return false;
         }

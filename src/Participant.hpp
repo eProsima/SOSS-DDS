@@ -21,6 +21,7 @@
 
 #include <fastdds/dds/core/Entity.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastrtps/types/DynamicType.h>
@@ -98,7 +99,10 @@ public:
      * @throws DDSMiddlewareException If the *DomainParticipant* could not be created.
      */
     void build_participant(
-            const ::fastdds::dds::DomainId_t& domain_id = 0);
+            const YAML::Node& config);
+
+    //! Build participant with empty configuration
+    void build_participant();
 
     /**
      * @brief Get the associate *FastDDS DomainParticipant* attribute.
@@ -193,23 +197,21 @@ public:
             ::fastdds::dds::Topic* topic,
             ::fastdds::dds::DomainEntity* entity);
 
+protected:
+
+    //! Get Participant QoS using config file
+    eprosima::fastdds::dds::DomainParticipantQos get_participant_qos(
+            const YAML::Node& config);
+
+    //! Get Integration Service Participant default Qos
+    eprosima::fastdds::dds::DomainParticipantQos get_default_participant_qos();
+
+    //! Get Databroker DomainParticipantQos with TCP enable in WAN
+    //! It uses \c get_participant_qos to reuse std participant tags
+    eprosima::fastdds::dds::DomainParticipantQos get_databroker_qos(
+            const YAML::Node& config);
+
 private:
-
-    /**
-     * @brief Create a *Fast DDS DomainParticipant* using a certain profile.
-     *
-     * @note This method is a workaround due to `v2.0.X` versions of *Fast DDS* not including
-     *        this method inside the *DomainParticipantFactory* class.
-     *
-     * @param[in] profile_name The XML profile name for the participant.
-     *
-     * @returns A correctly initialized DomainParticipant.
-     *
-     * @throws DDSMiddlewareException if some error occurs during the creation process.
-     */
-    ::fastdds::dds::DomainParticipant* create_participant_with_profile(
-        const std::string& profile_name);
-
 
     /**
      * Class members.
