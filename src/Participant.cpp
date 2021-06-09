@@ -72,29 +72,24 @@ void Participant::build_participant()
 void Participant::build_participant(
         const YAML::Node& config)
 {
-    logger_ << utils::Logger::Level::DEBUG << "Creating new fastdds Participant" << std::endl;
-
     // Check if domain_id exists in config
     eprosima::fastdds::dds::DomainId_t domain_id(0);
 
     // Check if domain_id tag is under other tag
     if (config["domain_id"])
     {
-        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from plain config" << std::endl;
         domain_id = config["domain_id"].as<uint32_t>();
     }
     else if (config["participant"] && config["participant"]["domain_id"])
     {
-        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from participant" << std::endl;
         domain_id = config["participant"]["domain_id"].as<uint32_t>();
     }
     else if (config["databroker"] && config["databroker"]["domain_id"])
     {
-        logger_ << utils::Logger::Level::DEBUG << "#! Get Domain from databroker" << std::endl;
         domain_id = config["databroker"]["domain_id"].as<uint32_t>();
     }
 
-    logger_ << utils::Logger::Level::DEBUG << "Creating Participant QoS" << std::endl;
+    logger_ << utils::Logger::Level::DEBUG << "Creating new fastdds Participant in domain " << domain_id << std::endl;
 
     ::fastdds::dds::DomainParticipantQos participant_qos;
 
@@ -105,7 +100,15 @@ void Participant::build_participant(
     }
     else
     {
-        participant_qos = get_participant_qos(config["participant"]);
+        if (config["participant"])
+        {
+            participant_qos = get_participant_qos(config["participant"]);
+        }
+        else
+        {
+            // Case there is not participant tag in config it sends an empty yaml
+            participant_qos = get_participant_qos(YAML::Node());
+        }
     }
 
     dds_participant_ = ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
@@ -312,8 +315,6 @@ bool Participant::dissociate_topic_from_dds_entity(
 
 eprosima::fastdds::dds::DomainParticipantQos Participant::get_default_participant_qos()
 {
-    logger_ << utils::Logger::Level::DEBUG << "#! get_default_participant_qos" << std::endl;
-
     eprosima::fastdds::dds::DomainParticipantQos df_pqos;
     df_pqos.name("default_IS-FastDDS-SH_participant");
 
@@ -329,8 +330,6 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_default_participan
 eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
         const YAML::Node& config)
 {
-    logger_ << utils::Logger::Level::DEBUG << "#! get_participant_qos" << std::endl;
-
     // Load XML if set in config yaml
     if (config["file_path"])
     {
@@ -372,8 +371,6 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
 eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
         const YAML::Node& config)
 {
-    logger_ << utils::Logger::Level::DEBUG << "#! get_databroker_qos" << std::endl;
-
     // Call first std participant qos to reuse std flags for fastdds SH
     eprosima::fastdds::dds::DomainParticipantQos pqos = get_participant_qos(config);
 
