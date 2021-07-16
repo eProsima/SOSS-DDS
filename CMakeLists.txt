@@ -34,6 +34,11 @@ option(IS_FASTDDS_SH_USING_FASTDDS_EXTERNALPROJECT
 option(BUILD_LIBRARY "Compile the Fast DDS SystemHandle" ON)
 
 ###################################################################################
+# Set Aliases for FastDDS SH
+###################################################################################
+set (ALIASES "databroker")
+
+###################################################################################
 # Load external CMake Modules.
 ###################################################################################
 if(BUILD_LIBRARY)
@@ -224,6 +229,8 @@ if(BUILD_LIBRARY)
             fastdds
         TARGET
             is-fastdds
+        ALIAS
+            ${ALIASES}
     )
 endif()
 

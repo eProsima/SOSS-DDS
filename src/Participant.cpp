@@ -75,18 +75,10 @@ void Participant::build_participant(
     // Check if domain_id exists in config
     eprosima::fastdds::dds::DomainId_t domain_id(0);
 
-    // Check if domain_id tag is under other tag
+    // Check if domain_id tag is present inconfiguration, if not 0 as default
     if (config["domain_id"])
     {
         domain_id = config["domain_id"].as<uint32_t>();
-    }
-    else if (config["participant"] && config["participant"]["domain_id"])
-    {
-        domain_id = config["participant"]["domain_id"].as<uint32_t>();
-    }
-    else if (config["databroker"] && config["databroker"]["domain_id"])
-    {
-        domain_id = config["databroker"]["domain_id"].as<uint32_t>();
     }
 
     logger_ << utils::Logger::Level::DEBUG << "Creating new fastdds Participant in domain " << domain_id << std::endl;

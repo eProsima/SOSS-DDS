@@ -69,7 +69,7 @@ public:
      *        in the *YAML* configuration file.
      *
      * @param[in] config The configuration provided by the user.
-     *            It must contain two keys in the *YAML* map:
+     *            In case of fastdds type it can contain two keys in the *YAML* map:
      *
      *            - `file_path`: Specifies the path to the XML profile that will be used to configure the
      *              *DomainParticipant*. More information on how to write these XML profiles can be found
@@ -79,6 +79,19 @@ public:
      *            - `profile_name`: Provide a name to search for within the profiles defined in the XML
      *              that corresponds to the configuration profile that we want this Participant
      *              to be configured with.
+     *
+     *           In case of databroker type it can contain three keys in the *YAML* map:
+     *
+     *            - `server_id`: Specifies the Discovery Server id in order to generate a GUID to it.
+     *
+     *            - `listening_addresses`: Specifies a list of TCP listening addresses.
+     *                  - `ip`: Public IP where the Server will be listening.
+     *                  - `port`: Port where the Server will be listening.
+     *
+     *            - `connection_addresses`: Specifies a list of TCP connection addresses.
+     *                  - `ip`: Public IP to the Server to connect with.
+     *                  - `port`: Port to the Server to connect with.
+     *                  - `server_id`: Id of the remote server to connect.
      *
      * @throws DDSMiddlewareException If the XML profile was incorrect and, thus, the
      *         *DomainParticipant* could not be created.
@@ -94,7 +107,7 @@ public:
     /**
      * @brief Construct a *Fast DDS DomainParticipant*, given its DDS domain ID.
      *
-     * @param[in] domain_id The DDS domain ID for this participant.
+     * @param[in] config The configuration provided by the user.
      *
      * @throws DDSMiddlewareException If the *DomainParticipant* could not be created.
      */
@@ -199,16 +212,41 @@ public:
 
 protected:
 
-    //! Get Participant QoS using config file
+    /**
+     * @brief Get Participant QoS using config file.
+     *
+     * Set all default values to QoS and then use specific FastSH tags to configure the participant:
+     * Tags: file_path, profile_name
+     *
+     * @param[in] config The configuration provided by the user.
+     *
+     * @return Specific QoS by user configuration.
+     */
     eprosima::fastdds::dds::DomainParticipantQos get_participant_qos(
             const YAML::Node& config);
 
-    //! Get Integration Service Participant default Qos
+    /**
+     * @brief Get Integration Service Participant default Qos
+     *
+     * @return Defult SystemHandler Participant QoS
+     */
     eprosima::fastdds::dds::DomainParticipantQos get_default_participant_qos();
 
-    //! Get Databroker DomainParticipantQos with TCP enable in WAN
-    //! It uses \c get_participant_qos to reuse std participant tags
-    //! tags: server_id, listening_addresses, connection_addresses
+    /**
+     * @brief Get Databroker DomainParticipantQos with TCP enable in WAN
+     *
+     * It uses \c get_participant_qos to reuse std participant tags and the uses specific databroker tags:
+     * Databroker tags:
+     *  server_id : id of the Discovery Server [0:256)
+     *  listening_addresses     : Listening addresses (public) for Discovery Server to listen in TCP
+     *   fields                 : ip, port
+     *  connection_addresses    : Connection addresses for Discovery Server to connect with other servers
+     *   fields                 : ip, port, server_id
+     *
+     * @param config The configuration provided by the user.
+     *
+     * @return Specific QoS by user configuration.
+     */
     eprosima::fastdds::dds::DomainParticipantQos get_databroker_qos(
             const YAML::Node& config);
 
