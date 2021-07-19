@@ -75,6 +75,11 @@ public:
             }
             else
             {
+                logger_ << utils::Logger::Level::WARN
+                        << "Participant not provided in configuration file. "
+                        << "A participant using the default transport locators "
+                        << "and Domain ID 0 will be created." << std::endl;
+
                 participant_ = std::make_unique<Participant>();
             }
         }
@@ -299,4 +304,3 @@ private:
 
 // TODO aliases must come from CMAKE
 IS_REGISTER_SYSTEM("fastdds", eprosima::is::sh::fastdds::SystemHandle)
-IS_REGISTER_SYSTEM("databroker", eprosima::is::sh::fastdds::SystemHandle)

@@ -69,7 +69,7 @@ void Participant::build_participant(
     // Set 0 as default domain
     eprosima::fastdds::dds::DomainId_t domain_id(0);
 
-    // Check if domain_id tag is present inconfiguration, if not 0 as default
+    // Check if domain_id tag is present in configuration, if not 0 as default
     if (config["domain_id"])
     {
         domain_id = config["domain_id"].as<uint32_t>();
