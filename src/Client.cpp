@@ -27,9 +27,9 @@
 #include <fastdds/dds/subscriber/DataReader.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
 #include <fastdds/dds/subscriber/SampleInfo.hpp>
-#if FASTRTPS_VERSION_MINOR >= 2
+#if FASTRTPS_VERSION_MAJOR >= 2 && FASTRTPS_VERSION_MINOR >= 2
 #include <fastdds/dds/subscriber/InstanceState.hpp>
-#endif //  if FASTRTPS_VERSION_MINOR >= 2
+#endif //  if FASTRTPS_VERSION_MAJOR >= 2 && FASTRTPS_VERSION_MINOR >= 2
 
 #include <iostream>
 

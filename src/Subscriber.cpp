@@ -23,9 +23,9 @@
 #include <fastdds/dds/subscriber/SubscriberListener.hpp>
 #include <fastdds/dds/subscriber/DataReader.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
-#if FASTRTPS_VERSION_MINOR >= 2
+#if FASTRTPS_VERSION_MAJOR >= 2 && FASTRTPS_VERSION_MINOR >= 2
 #include <fastdds/dds/subscriber/InstanceState.hpp>
-#endif //  if FASTRTPS_VERSION_MINOR >= 2
+#endif //  if FASTRTPS_VERSION_MAJOR >= 2 && FASTRTPS_VERSION_MINOR >= 2
 
 #include <functional>
 #include <iostream>
@@ -214,11 +214,11 @@ void Subscriber::on_data_available(
     if (!stop_cleaner_ && fastrtps::types::ReturnCode_t::RETCODE_OK
             == dds_datareader_->take_next_sample(dynamic_data_, &info))
     {
-#if FASTRTPS_VERSION_MINOR < 2
+#if FASTRTPS_VERSION_MAJOR < 2 || FASTRTPS_VERSION_MINOR < 2
         if (::fastdds::dds::InstanceStateKind::ALIVE == info.instance_state)
 #else
         if (::fastdds::dds::InstanceStateKind::ALIVE_INSTANCE_STATE == info.instance_state)
-#endif //  if FASTRTPS_VERSION_MINOR < 2
+#endif //  if FASTRTPS_VERSION_MAJOR < 2 || FASTRTPS_VERSION_MINOR < 2
         {
             logger_ << utils::Logger::Level::DEBUG
                     << "Processing incoming data available for topic '"

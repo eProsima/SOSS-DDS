@@ -21,6 +21,7 @@
 
 #include <fastdds/dds/core/Entity.hpp>
 #include <fastdds/dds/domain/DomainParticipant.hpp>
+#include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
 #include <fastdds/dds/domain/DomainParticipantFactory.hpp>
 #include <fastdds/dds/domain/DomainParticipantListener.hpp>
 #include <fastrtps/types/DynamicType.h>
@@ -68,7 +69,7 @@ public:
      *        in the *YAML* configuration file.
      *
      * @param[in] config The configuration provided by the user.
-     *            It must contain two keys in the *YAML* map:
+     *            In case of fastdds type it can contain two keys in the *YAML* map:
      *
      *            - `file_path`: Specifies the path to the XML profile that will be used to configure the
      *              *DomainParticipant*. More information on how to write these XML profiles can be found
@@ -78,6 +79,19 @@ public:
      *            - `profile_name`: Provide a name to search for within the profiles defined in the XML
      *              that corresponds to the configuration profile that we want this Participant
      *              to be configured with.
+     *
+     *           In case of databroker type it can contain three keys in the *YAML* map:
+     *
+     *            - `server_id`: Specifies the Discovery Server ID in order to generate its GUID.
+     *
+     *            - `listening_addresses`: Specifies a list of TCP listening addresses.
+     *                  - `ip`: Provides the public IP where the Server will be listening.
+     *                  - `port`: Provides the port where the Server will be listening.
+     *
+     *            - `connection_addresses`: Specifies a list of TCP connection addresses.
+     *                  - `ip`: Provides the public IP of the Server to connect to.
+     *                  - `port`: Provides the port of the Server to connect to.
+     *                  - `server_id`: Provides the ID of the remote Server to connect to.
      *
      * @throws DDSMiddlewareException If the XML profile was incorrect and, thus, the
      *         *DomainParticipant* could not be created.
@@ -93,12 +107,12 @@ public:
     /**
      * @brief Construct a *Fast DDS DomainParticipant*, given its DDS domain ID.
      *
-     * @param[in] domain_id The DDS domain ID for this participant.
+     * @param[in] config The configuration provided by the user.
      *
      * @throws DDSMiddlewareException If the *DomainParticipant* could not be created.
      */
     void build_participant(
-            const ::fastdds::dds::DomainId_t& domain_id = 0);
+            const YAML::Node& config);
 
     /**
      * @brief Get the associate *FastDDS DomainParticipant* attribute.
@@ -193,23 +207,37 @@ public:
             ::fastdds::dds::Topic* topic,
             ::fastdds::dds::DomainEntity* entity);
 
-private:
+protected:
 
     /**
-     * @brief Create a *Fast DDS DomainParticipant* using a certain profile.
+     * @brief Get Fast DDS System Handle Participant default QoS
      *
-     * @note This method is a workaround due to `v2.0.X` versions of *Fast DDS* not including
-     *        this method inside the *DomainParticipantFactory* class.
-     *
-     * @param[in] profile_name The XML profile name for the participant.
-     *
-     * @returns A correctly initialized DomainParticipant.
-     *
-     * @throws DDSMiddlewareException if some error occurs during the creation process.
+     * @return Default Participant QoS
      */
-    ::fastdds::dds::DomainParticipant* create_participant_with_profile(
-        const std::string& profile_name);
+    eprosima::fastdds::dds::DomainParticipantQos get_default_participant_qos();
 
+    /**
+     * @brief Get Databroker DomainParticipantQos.
+     * @details The transport used over WAN is TCP.
+     *          It calls \c get_participant_qos to reuse Participant YAML tags and then applies the specific Databroker tags:
+     *          Databroker tags:
+     *              * server_id: ID of the Discovery Server. It must be within the valid range [0:256).
+     *              * listening_addresses: Listening addresses (public) for Discovery Server to listen in TCP.
+     *                  * ip
+     *                  * port
+     *              * connection_addresses: Connection addresses for Discovery Server to connect to other servers.
+     *                  * ip
+     *                  * port
+     *                  * server_id
+     *
+     * @param[in] config The configuration provided by the user.
+     *
+     * @return Specific QoS by user configuration.
+     */
+    eprosima::fastdds::dds::DomainParticipantQos get_databroker_qos(
+            const YAML::Node& config);
+
+private:
 
     /**
      * Class members.

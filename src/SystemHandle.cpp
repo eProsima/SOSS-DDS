@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Proyectos y Sistemas de Mantenimiento SL (eProsima).
+ * Copyright 2021 Proyectos y Sistemas de Mantenimiento SL (eProsima).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +85,7 @@ public:
         }
         catch (DDSMiddlewareException& e)
         {
+            logger_ << utils::Logger::Level::ERROR << "Participant creation failed." << std::endl;
             e.from_logger << utils::Logger::Level::ERROR << e.what() << std::endl;
             return false;
         }
@@ -301,4 +302,5 @@ private:
 } //  namespace is
 } //  namespace eprosima
 
+// TODO aliases must come from CMAKE
 IS_REGISTER_SYSTEM("fastdds", eprosima::is::sh::fastdds::SystemHandle)
