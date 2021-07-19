@@ -74,7 +74,7 @@ public:
         }
         catch (DDSMiddlewareException& e)
         {
-            logger_ << utils::Logger::Level::ERROR << "Error creating participant" << std::endl;
+            logger_ << utils::Logger::Level::ERROR << "Participant creation failed." << std::endl;
             e.from_logger << utils::Logger::Level::ERROR << e.what() << std::endl;
             return false;
         }

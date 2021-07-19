@@ -18,7 +18,7 @@
 #include "Participant.hpp"
 #include "DDSMiddlewareException.hpp"
 #include "Conversion.hpp"
-#include "utils.hpp"
+#include "utils/databroker/utils.hpp"
 
 #include <fastdds/rtps/transport/TCPv4TransportDescriptor.h>
 #include <fastdds/rtps/transport/UDPv4TransportDescriptor.h>
@@ -37,7 +37,7 @@ Participant::Participant()
     : dds_participant_(nullptr)
     , logger_("is::sh::FastDDS::Participant")
 {
-    build_participant();
+    build_participant(YAML::Node());
 }
 
 Participant::Participant(
@@ -63,29 +63,24 @@ Participant::~Participant()
     }
 }
 
-void Participant::build_participant()
-{
-    // Call build participant with empty configuration
-    build_participant(YAML::Node());
-}
-
 void Participant::build_participant(
         const YAML::Node& config)
 {
-    // Check if domain_id exists in config
+    // Set 0 as default domain
     eprosima::fastdds::dds::DomainId_t domain_id(0);
 
     // Check if domain_id tag is present inconfiguration, if not 0 as default
-    if (config["domain_id"])
+    if (config["participant"] && config["participant"]["domain_id"])
     {
-        domain_id = config["domain_id"].as<uint32_t>();
+        domain_id = config["participant"]["domain_id"].as<uint32_t>();
     }
 
-    logger_ << utils::Logger::Level::DEBUG << "Creating new fastdds Participant in domain " << domain_id << std::endl;
+    logger_ << utils::Logger::Level::DEBUG
+            << "Creating Fast DDS Participant in domain " << domain_id << std::endl;
 
     ::fastdds::dds::DomainParticipantQos participant_qos;
 
-    // Depending the SH type, use participant std qos or databroker qos
+    // Depending the SH type, use participant qos or databroker qos
     if (config["type"] && config["type"].as<std::string>() == "databroker")
     {
         participant_qos = get_databroker_qos(config["participant"]);
@@ -330,7 +325,8 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
             fastrtps::xmlparser::XMLProfileManager::loadXMLFile(file_path))
         {
             std::ostringstream err;
-            err << "Loading provided XML file in 'file_path': " << file_path << " incorrect or unexisted file";
+            err << "Failed to load XML file provided in 'file_path': " << file_path
+                << ". It cannot be found or is incorrect.";
             throw DDSMiddlewareException(
                 logger_, err.str());
         }
@@ -350,7 +346,7 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
                     pqos))
         {
             std::ostringstream err;
-            err << "Failed to fetch Fast DDS participant qos from XML "
+            err << "Failed to fetch Fast DDS Participant QoS from XML "
                 << "for profile named '" << profile_name << "'";
 
             throw DDSMiddlewareException(logger_, err.str());
@@ -363,10 +359,9 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
 eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
         const YAML::Node& config)
 {
-    // Call first std participant qos to reuse std flags for fastdds SH
+    // Use the Participant QoS as base for the Databroker QoS
     eprosima::fastdds::dds::DomainParticipantQos pqos = get_participant_qos(config);
 
-    //////
     // Server id
     uint32_t server_id = 0;
     if (config["server_id"])
@@ -374,26 +369,23 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
         // Conversion to int is needed so it is not treated as a char
         server_id = config["server_id"].as<uint32_t>() % std::numeric_limits<uint8_t>::max();
         logger_ << utils::Logger::Level::DEBUG
-                << "Server id set by configuration to " << server_id << std::endl;
+                << "Server ID set to " << server_id << std::endl;
     }
     else
     {
         logger_ << utils::Logger::Level::INFO
-                << "Not Server ID set in configuration, use 0 as default" << std::endl;
+                << "The Server ID is not set in the configuration file. It will be set to 0." << std::endl;
     }
 
-    // Set guid manually depending on the id
+    // Set GUID depending on the id
     pqos.wire_protocol().prefix = guid_server(server_id);
     pqos.name("DataBroker_IS-FastDDS-SH_participant_" + std::to_string(server_id));
 
-    //////
     // Listening addresses
     if (config["listening_addresses"])
     {
-        YAML::Node listening_addresses = config["listening_addresses"];
-
         // Configure listening address
-        for (auto address : listening_addresses)
+        for (auto address : config["listening_addresses"])
         {
             std::string ip;
             uint16_t port;
@@ -405,11 +397,8 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             }
             else
             {
-                std::ostringstream err;
-                err << "Address in <listening_addresses> must contain a field <ip> ";
-
-                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
-
+                logger_ << utils::Logger::Level::WARN
+                        << "The addresses in 'listening_addresses' must contain a tag 'ip'." << std::endl;
                 continue;
             }
 
@@ -419,11 +408,8 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             }
             else
             {
-                std::ostringstream err;
-                err << "Address in <listening_addresses> must contain a field <port> ";
-
-                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
-
+                logger_ << utils::Logger::Level::WARN
+                        << "The addresses in 'listening_addresses' must contain a tag 'port'. " << std::endl;
                 continue;
             }
 
@@ -462,14 +448,11 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
                 << std::endl;
     }
 
-    //////
     // Connection addresses
     if (config["connection_addresses"])
     {
-        YAML::Node connection_addresses = config["connection_addresses"];
-
         // Configure listening address
-        for (auto address : connection_addresses)
+        for (auto address : config["connection_addresses"])
         {
             std::string ip;
             uint16_t port;
@@ -482,11 +465,8 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             }
             else
             {
-                std::ostringstream err;
-                err << "Address in <connection_addresses> must contain a field <ip> ";
-
-                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
-
+                logger_ << utils::Logger::Level::WARN
+                        << "The addresses in 'connection_addresses' must contain a tag 'ip'." << std::endl;
                 continue;
             }
 
@@ -496,11 +476,8 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             }
             else
             {
-                std::ostringstream err;
-                err << "Address in <connection_addresses> must contain a field <port> ";
-
-                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
-
+                logger_ << utils::Logger::Level::WARN
+                        << "The addresses in 'connection_addresses' must contain a tag 'port'."  << std::endl;
                 continue;
             }
 
@@ -510,15 +487,12 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             }
             else
             {
-                std::ostringstream err;
-                err << "Address in <connection_addresses> must contain a field <server_id> ";
-
-                logger_ << utils::Logger::Level::ERROR << err.str() << std::endl;
-
+                logger_ << utils::Logger::Level::WARN
+                        << "The addresses in 'connection_addresses' must contain a tag 'server_id'."  << std::endl;
                 continue;
             }
 
-            // Set Server guid manually
+            // Set Server GUID
             eprosima::fastrtps::rtps::RemoteServerAttributes server_attr;
             server_attr.guidPrefix = guid_server(server_id);
 
@@ -533,14 +507,14 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
             pqos.wire_protocol().builtin.discovery_config.m_DiscoveryServers.push_back(server_attr);
 
             logger_ << utils::Logger::Level::DEBUG
-                    << "Connecting to remote server with guid: " << server_attr.guidPrefix
+                    << "Connecting to remote server with GUID: " << server_attr.guidPrefix
                     << " in: " << ip << ":" << port << std::endl;
         }
     }
     else
     {
         logger_ << utils::Logger::Level::INFO
-                << "Server has no connection addresses, it will not try to connect to remote servers"
+                << "Server has no connection addresses. It will not try to connect to remote servers"
                 << std::endl;
     }
 
@@ -554,7 +528,7 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
         fastrtps::rtps::DiscoveryProtocol::SERVER;
 
     logger_ << utils::Logger::Level::DEBUG
-            << "Databroker initialized with GUID " << pqos.wire_protocol().prefix << std::endl;
+            << "Databroker initialized with GUID: " << pqos.wire_protocol().prefix << std::endl;
 
     return pqos;
 }

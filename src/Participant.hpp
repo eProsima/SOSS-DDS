@@ -82,16 +82,16 @@ public:
      *
      *           In case of databroker type it can contain three keys in the *YAML* map:
      *
-     *            - `server_id`: Specifies the Discovery Server id in order to generate a GUID to it.
+     *            - `server_id`: Specifies the Discovery Server ID in order to generate its GUID.
      *
      *            - `listening_addresses`: Specifies a list of TCP listening addresses.
-     *                  - `ip`: Public IP where the Server will be listening.
-     *                  - `port`: Port where the Server will be listening.
+     *                  - `ip`: Provides the public IP where the Server will be listening.
+     *                  - `port`: Provides the port where the Server will be listening.
      *
      *            - `connection_addresses`: Specifies a list of TCP connection addresses.
-     *                  - `ip`: Public IP to the Server to connect with.
-     *                  - `port`: Port to the Server to connect with.
-     *                  - `server_id`: Id of the remote server to connect.
+     *                  - `ip`: Provides the public IP of the Server to connect to.
+     *                  - `port`: Provides the port of the Server to connect to.
+     *                  - `server_id`: Provides the ID of the remote Server to connect to.
      *
      * @throws DDSMiddlewareException If the XML profile was incorrect and, thus, the
      *         *DomainParticipant* could not be created.
@@ -113,9 +113,6 @@ public:
      */
     void build_participant(
             const YAML::Node& config);
-
-    //! Build participant with empty configuration
-    void build_participant();
 
     /**
      * @brief Get the associate *FastDDS DomainParticipant* attribute.
@@ -226,24 +223,27 @@ protected:
             const YAML::Node& config);
 
     /**
-     * @brief Get Integration Service Participant default Qos
+     * @brief Get Fast DDS System Handle Participant default QoS
      *
-     * @return Defult SystemHandler Participant QoS
+     * @return Default Participant QoS
      */
     eprosima::fastdds::dds::DomainParticipantQos get_default_participant_qos();
 
     /**
-     * @brief Get Databroker DomainParticipantQos with TCP enable in WAN
+     * @brief Get Databroker DomainParticipantQos.
+     * @details The transport used over WAN is TCP.
+     *          It calls \c get_participant_qos to reuse Participant YAML tags and then applies the specific Databroker tags:
+     *          Databroker tags:
+     *              * server_id: ID of the Discovery Server. It must be within the valid range [0:256).
+     *              * listening_addresses: Listening addresses (public) for Discovery Server to listen in TCP.
+     *                  * ip
+     *                  * port
+     *              * connection_addresses: Connection addresses for Discovery Server to connect to other servers.
+     *                  * ip
+     *                  * port
+     *                  * server_id
      *
-     * It uses \c get_participant_qos to reuse std participant tags and the uses specific databroker tags:
-     * Databroker tags:
-     *  server_id : id of the Discovery Server [0:256)
-     *  listening_addresses     : Listening addresses (public) for Discovery Server to listen in TCP
-     *   fields                 : ip, port
-     *  connection_addresses    : Connection addresses for Discovery Server to connect with other servers
-     *   fields                 : ip, port, server_id
-     *
-     * @param config The configuration provided by the user.
+     * @param[in] config The configuration provided by the user.
      *
      * @return Specific QoS by user configuration.
      */
