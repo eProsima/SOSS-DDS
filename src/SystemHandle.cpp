@@ -69,8 +69,14 @@ public:
          */
         try
         {
-            // TODO Add a warning that was here in Participant build_participant creation
-            participant_ = std::make_unique<Participant>(configuration);
+            if (configuration["participant"])
+            {
+                participant_ = std::make_unique<Participant>(configuration["participant"]);
+            }
+            else
+            {
+                participant_ = std::make_unique<Participant>();
+            }
         }
         catch (DDSMiddlewareException& e)
         {

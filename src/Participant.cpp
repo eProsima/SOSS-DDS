@@ -70,23 +70,25 @@ void Participant::build_participant(
     eprosima::fastdds::dds::DomainId_t domain_id(0);
 
     // Check if domain_id tag is present inconfiguration, if not 0 as default
-    if (config["participant"] && config["participant"]["domain_id"])
+    if (config["domain_id"])
     {
-        domain_id = config["participant"]["domain_id"].as<uint32_t>();
+        domain_id = config["domain_id"].as<uint32_t>();
     }
 
     logger_ << utils::Logger::Level::DEBUG
             << "Creating Fast DDS Participant in domain " << domain_id << std::endl;
 
+    // Load default XML files
+    fastrtps::xmlparser::XMLProfileManager::loadDefaultXMLFile();
+
     // Loading XML if file_path is given
-    if (config["participant"] && config["participant"]["file_path"])
+    if (config["file_path"])
     {
-        const std::string file_path = config["file_path"].as<std::string>();
         if (fastrtps::xmlparser::XMLP_ret::XML_OK !=
-            fastrtps::xmlparser::XMLProfileManager::loadXMLFile(file_path))
+            fastrtps::xmlparser::XMLProfileManager::loadXMLFile(config["file_path"].as<std::string>()))
         {
             std::ostringstream err;
-            err << "Failed to load XML file provided in 'file_path': " << file_path
+            err << "Failed to load XML file provided in 'file_path': " << config["file_path"].as<std::string>()
                 << ". It cannot be found or is incorrect.";
             throw DDSMiddlewareException(
                 logger_, err.str());
@@ -97,16 +99,16 @@ void Participant::build_participant(
     std::string participant_name;
 
     // If profile_name is given in configuration, the other tags do not apply
-    if (!config["participant"] || !config["participant"]["profile_name"])
+    if (!config["profile_name"])
     {
         // Participant QoS
         ::fastdds::dds::DomainParticipantQos participant_qos;
 
         // Depending the SH type, use participant qos or databroker qos
         // TODO : change for databroker alias refactor
-        if (config["type"] && config["type"].as<std::string>() == "databroker")
+        if (config["discovery-server"])
         {
-            participant_qos = get_databroker_qos(config["participant"]);
+            participant_qos = get_databroker_qos(config["discovery-server"]);
         }
         else
         {
@@ -122,11 +124,12 @@ void Participant::build_participant(
     }
     else
     {
-        participant_name = config["participant"]["profile_name"].as<std::string>();
+        participant_name = config["profile_name"].as<std::string>();
 
         // Create Participant from profile name
         dds_participant_ =
             ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant_with_profile(
+                domain_id,
                 config["profile_name"].as<std::string>());
     }
 
