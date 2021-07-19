@@ -46,3 +46,33 @@ jobs:
         run: |
           . install/local_setup.sh && colcon test --packages-up-to is-fastdds --event-handlers console_direct+
           colcon test-result
+
+  fastdds-sh_CI_ros2version:
+    strategy:
+      matrix:
+        node: [foxy, galactic]
+    runs-on: ubuntu-20.04
+    container: ros:${{ matrix.node }}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: src/fastdds-sh
+
+      - name: Download required dependencies
+        run: |
+          apt update
+          DEBIAN_FRONTEND=noninteractive apt install -y cmake gcc g++ git libboost-dev libboost-program-options-dev libyaml-cpp-dev ros-${{ matrix.node }}-fastrtps
+
+      - name: Download the Integration Service
+        run: |
+          git clone --recursive https://github.com/eProsima/Integration-Service src/integration-service
+
+      - name: Build
+        run: |
+          colcon build --cmake-args -DCMAKE_BUILD_TYPE=DEBUG -DBUILD_FASTDDS_TESTS=ON --event-handlers console_direct+
+
+      - name: Test
+        run: |
+          . install/local_setup.sh && colcon test --packages-up-to is-fastdds --event-handlers console_direct+
+          colcon test-result
