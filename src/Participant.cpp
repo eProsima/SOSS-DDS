@@ -78,40 +78,68 @@ void Participant::build_participant(
     logger_ << utils::Logger::Level::DEBUG
             << "Creating Fast DDS Participant in domain " << domain_id << std::endl;
 
-    ::fastdds::dds::DomainParticipantQos participant_qos;
-
-    // Depending the SH type, use participant qos or databroker qos
-    if (config["type"] && config["type"].as<std::string>() == "databroker")
+    // Loading XML if file_path is given
+    if (config["participant"] && config["participant"]["file_path"])
     {
-        participant_qos = get_databroker_qos(config["participant"]);
-    }
-    else
-    {
-        if (config["participant"])
+        const std::string file_path = config["file_path"].as<std::string>();
+        if (fastrtps::xmlparser::XMLP_ret::XML_OK !=
+            fastrtps::xmlparser::XMLProfileManager::loadXMLFile(file_path))
         {
-            participant_qos = get_participant_qos(config["participant"]);
+            std::ostringstream err;
+            err << "Failed to load XML file provided in 'file_path': " << file_path
+                << ". It cannot be found or is incorrect.";
+            throw DDSMiddlewareException(
+                logger_, err.str());
+        }
+    }
+
+    // Debug variable
+    std::string participant_name;
+
+    // If profile_name is given in configuration, the other tags do not apply
+    if (!config["participant"] || !config["participant"]["profile_name"])
+    {
+        // Participant QoS
+        ::fastdds::dds::DomainParticipantQos participant_qos;
+
+        // Depending the SH type, use participant qos or databroker qos
+        // TODO : change for databroker alias refactor
+        if (config["type"] && config["type"].as<std::string>() == "databroker")
+        {
+            participant_qos = get_databroker_qos(config["participant"]);
         }
         else
         {
-            // Case there is not participant tag in config it sends an empty yaml
-            participant_qos = get_participant_qos(YAML::Node());
+            participant_qos = get_default_participant_qos();
         }
-    }
 
-    dds_participant_ = ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
-        domain_id,
-        participant_qos);
+        participant_name = participant_qos.name();
+
+        dds_participant_ =
+            ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant(
+                domain_id,
+                participant_qos);
+    }
+    else
+    {
+        participant_name = config["participant"]["profile_name"].as<std::string>();
+
+        // Create Participant from profile name
+        dds_participant_ =
+            ::fastdds::dds::DomainParticipantFactory::get_instance()->create_participant_with_profile(
+                config["profile_name"].as<std::string>());
+    }
 
     if (dds_participant_)
     {
         logger_ << utils::Logger::Level::INFO
-                << "Created Fast DDS participant '" << participant_qos.name()
+                << "Created Fast DDS participant '" << participant_name
                 << "' with Domain ID: " << domain_id << std::endl;
     }
     else
     {
         std::ostringstream err;
-        err << "Error while creating Fast DDS participant '" << participant_qos.name()
+        err << "Error while creating Fast DDS participant '" << participant_name
             << "' with Domain ID: " << domain_id;
 
         throw DDSMiddlewareException(logger_, err.str());
@@ -314,53 +342,11 @@ eprosima::fastdds::dds::DomainParticipantQos Participant::get_default_participan
     return df_pqos;
 }
 
-eprosima::fastdds::dds::DomainParticipantQos Participant::get_participant_qos(
-        const YAML::Node& config)
-{
-    // Load XML if set in config yaml
-    if (config["file_path"])
-    {
-        const std::string file_path = config["file_path"].as<std::string>();
-        if (fastrtps::xmlparser::XMLP_ret::XML_OK !=
-            fastrtps::xmlparser::XMLProfileManager::loadXMLFile(file_path))
-        {
-            std::ostringstream err;
-            err << "Failed to load XML file provided in 'file_path': " << file_path
-                << ". It cannot be found or is incorrect.";
-            throw DDSMiddlewareException(
-                logger_, err.str());
-        }
-    }
-
-    // Variable to return
-    eprosima::fastdds::dds::DomainParticipantQos pqos = get_default_participant_qos();
-
-    // Load XML if set in config yaml
-    if (config["profile_name"])
-    {
-
-        const std::string profile_name = config["profile_name"].as<std::string>();
-        if (eprosima::fastrtps::types::ReturnCode_t::RETCODE_OK !=
-                eprosima::fastdds::dds::DomainParticipantFactory::get_instance()->get_participant_qos_from_profile(
-                    profile_name,
-                    pqos))
-        {
-            std::ostringstream err;
-            err << "Failed to fetch Fast DDS Participant QoS from XML "
-                << "for profile named '" << profile_name << "'";
-
-            throw DDSMiddlewareException(logger_, err.str());
-        }
-    }
-
-    return pqos;
-}
-
 eprosima::fastdds::dds::DomainParticipantQos Participant::get_databroker_qos(
         const YAML::Node& config)
 {
     // Use the Participant QoS as base for the Databroker QoS
-    eprosima::fastdds::dds::DomainParticipantQos pqos = get_participant_qos(config);
+    eprosima::fastdds::dds::DomainParticipantQos pqos = get_default_participant_qos();
 
     // Server id
     uint32_t server_id = 0;

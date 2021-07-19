@@ -210,19 +210,6 @@ public:
 protected:
 
     /**
-     * @brief Get Participant QoS using config file.
-     *
-     * Set all default values to QoS and then use specific FastSH tags to configure the participant:
-     * Tags: file_path, profile_name
-     *
-     * @param[in] config The configuration provided by the user.
-     *
-     * @return Specific QoS by user configuration.
-     */
-    eprosima::fastdds::dds::DomainParticipantQos get_participant_qos(
-            const YAML::Node& config);
-
-    /**
      * @brief Get Fast DDS System Handle Participant default QoS
      *
      * @return Default Participant QoS
